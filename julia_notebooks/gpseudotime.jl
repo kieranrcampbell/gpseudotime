@@ -17,7 +17,7 @@ using DataFrames
 
 #### Functions
 
-# In[276]:
+# In[530]:
 
 function pairwise_distance(t)
     n = length(t)
@@ -91,6 +91,11 @@ function acceptance_ratio(X, tp, t, thetap, theta, r, s)
     prior = corp_prior(tp, r) - corp_prior(t, r)
     #println(likelihood, " ",  prior)
     return s * (likelihood + prior) 
+end
+
+function couple_update_acceptance_ratio(X, t1, t2, theta1, theta2, r, s1, s2)
+    h(X, t, theta, r) = log_likelihood(X, t, theta) + corp_prior(t, r) 
+    return  ( (s1 - s2) * h(X, t2, theta2, r) + (s2 - s1) * h(X, t1, theta1, r) )
 end
    
 ## sampling function - DO NOT USE
@@ -236,11 +241,6 @@ Gadfly.plot(df, x = "iter", y = "sigma", Geom.line)
 Gadfly.plot(x = t_gt, y = mean(mh["tchain"], 1))
 
 
-# In[316]:
-
-Gadfly.plot(x = t, y = mean(mh["tchain"], 1))
-
-
 #### Posterior predictive mean
 
 # Posterior predictive mean given by
@@ -286,18 +286,18 @@ function swap_indices(n)
 end;
 
 
-# In[438]:
+# In[557]:
 
 srand(123)
 
 # temperature scales
-svec = [0.1, 0.5, 1] 
+svec = linspace(0, 1, 5) # [0, .1, .2, .5, 1] 
 ns = length(svec)
 
 r = 1
 
 # sampling parameters
-n_iter = 1000
+n_iter = 100000
 burn = n_iter / 2
 
 # pseudotime parameters
@@ -306,7 +306,7 @@ tvar = .2e-3
 
 # kernel parameters
 lambda = 1
-sigma = 1e-3
+sigma = 1.5e-3
 theta = [lambda, sigma]
 
 lvar = .5e-5
@@ -348,7 +348,12 @@ sigma_prop = zeros(size(sigma))
 alphas = zeros(ns)
 saccept = fill(false, ns)
 
+swap_position = zeros(n_iter)
+
 for i in 1:n_iter
+    if i % 10000 == 0
+        println("Iter ", i)
+    end
     
     ## Standard MH
     # proposals
@@ -378,19 +383,91 @@ for i in 1:n_iter
     tchain[i+1,:,:] = t
     theta_chain[i+1,:,:] = [lambda, sigma]
             
-    ## Cross chain coupling
+    ## Coupling update
     to_swap = swap_indices(ns) # two element array with chains to be swapped
     ## recall f & g are defined by 's'
+    t1 = vec(tchain[i+1,:,to_swap[1]])
+    t2 = vec(tchain[i+1,:,to_swap[2]])
+    theta1 = vec(theta_chain[i+1,:,to_swap[1]])
+    theta2 = vec(theta_chain[i+1,:,to_swap[2]])
     
     
-end
+    calpha = couple_update_acceptance_ratio(X, t1, t2, theta1, theta2, 
+    r, svec[to_swap[1]], svec[to_swap[2]])
+    # println(calpha, log(rand()))
 
+    if(calpha > log(rand()))
+        # swap chains
+        coupled_accept[i] = 1
+        tchain[i+1,:,to_swap[1]] = t2
+        tchain[i+1,:,to_swap[2]] = t1
+        theta_chain[i+1,:,to_swap[1]] = theta2
+        theta_chain[i+1,:,to_swap[2]] = theta1
+        
+        t = tchain[i+1,:,:]
+        lambda = theta_chain[i+1,1,:]
+        sigma = theta_chain[i+1,2,:]
+        # println("Swapped: ", string(to_swap))
+        swap_position[i] = to_swap[1]
+    end
+end
 
 #return rdict
 # end;
 
 
-# In[437]:
+# In[566]:
 
-swap_indices(10)
+mh = { "tchain" => tchain[burn:end,:,end],
+    "theta_chain" => theta_chain[burn:end,:,end],
+        "r" => r,
+    "svec" => svec,
+        "params" => {"n_iter" => n_iter,
+                    "burn" => burn},
+    "acceptance_rate" => mean(accepted,1),
+    "burn_acceptance_rate" => mean(accepted[burn:end,:], 1),
+    "coupled_acceptance_rate" => mean(coupled_accept),
+    "coupled_burn_acceptance_rate" => mean(coupled_accept[burn:end]),
+    "swap_position" => swap_position[burn:end]
+}
+
+
+# In[567]:
+
+sp = mh["swap_position"]
+Gadfly.plot(x = sp[find(sp .> 0)], Geom.histogram)
+
+
+# In[570]:
+
+#Gadfly.plot(x = 1:length(mh["swap_position"]), y = mh["swap_position"], Geom.line) #;
+
+
+# In[560]:
+
+Gadfly.set_default_plot_size(14cm,10cm)
+Gadfly.plot(x = t_gt, y = mean(mh["tchain"], 1))
+
+
+# In[561]:
+
+df = convert(DataFrame, mh["theta_chain"])
+names!(df, [symbol(x) for x in ["lambda", "sigma"]])
+df[:iter] = 1:(burn + 2)
+df_melted = stack(df, [1:2]);
+Gadfly.plot(df, x = "iter", y = "lambda", Geom.line)
+
+
+# In[562]:
+
+Gadfly.plot(df, x = "iter", y = "sigma", Geom.line)
+
+
+# In[565]:
+
+nchoose = 20
+df = convert(DataFrame, mh["tchain"][:, 1:nchoose])
+df[:iter] = 1:(burn + 2)
+df_melted = stack(df, [1:nchoose]);
+#Gadfly.plot(df_melted, x = "iter", y = "value", color = "variable", Geom.line)#;
 
