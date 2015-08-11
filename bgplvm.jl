@@ -7,9 +7,6 @@ Julia script for analysis
 kieran.campbell@sjc.ox.ac.uk=#
 
 using Distributions
-using Gadfly
-using PyPlot
-using DataFrames
 using HDF5
 
 trace_file = "data/traces.h5";
@@ -148,7 +145,6 @@ K = covariance_matrix(t_gt, lambda, sigma)
 x = rand(MvNormal(zeros(n), K))
 y = rand(MvNormal(zeros(n), K))
 X = [x y]
-Gadfly.plot(x = x, y = y, color = t_gt)
 
 
 # In[66]:
