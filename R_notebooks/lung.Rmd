@@ -1,0 +1,111 @@
+---
+title: "Generate laplacian eigenmaps embedding for GPLVM"
+author: "Kieran Campbell"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_align: center
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+In this vignette we apply `embeddr` to the [Quake et al.](http://www.nature.com/nature/journal/v509/n7500/full/nature13173.html) dataset. For copyright reasons we do not include the raw data in the package. It can be downloaded from [here](http://www.nature.com/nature/journal/v509/n7500/extref/nature13173-s4.txt) and converted to an `SCESet` using [the accompanying vignette](https://github.com/kieranrcampbell/embeddr/blob/master/vignettes/quake_to_scater.Rmd). 
+
+In this example we have saved it to `~/oxford/embeddr/data/lsce.Rdata`, though this should be changed to where you save it.
+
+```{r load-lib, message=FALSE, warning=FALSE}
+library(plyr)
+library(dplyr)
+library(devtools)
+library(data.table)
+library(ggplot2)
+library(reshape2)
+library(splines)
+library(corrplot)
+library(scater)
+library(gplots)
+library(NMF)
+library(monocle)
+library(embeddr)
+library(rhdf5)
+
+set.seed(123)
+```
+
+```{r load-data, cache=TRUE}
+## load object 'lsce' 
+#data_path <- '~/oxford/embeddr/data/lsce.Rdata'
+data_path <- '/net/isi-scratch/kieran/embeddr/data/lsce.Rdata'
+load(data_path)
+lsce@lowerDetectionLimit <- 0 # from paper
+```
+
+## Building the embedding
+
+
+Next we want to fit a noise model to find highly variable genes:
+```{r noise-model, cache=TRUE, fig.align='center'}
+Lmeans <- rowMeans(exprs(lsce))
+Lvars <- apply(exprs(lsce), 1, var)
+
+to_use <- Lmeans > 0.5 & Lvars > 0 
+
+LCV <- Lvars[to_use] / Lmeans[to_use]^2
+
+df_var <- data.frame(CV2 = LCV, m=Lmeans[to_use])
+
+fit_loglin <- nls(CV2 ~ a + b / m, data = df_var, start=c(a=80, b=5)) 
+
+f <- function(x) coef(fit_loglin)[1] + coef(fit_loglin)[2] / x
+
+is_het <- LCV > 1.5 * predict(fit_loglin)
+df_var$is_het <- is_het
+
+ggplot(df_var, aes(x=m, y=CV2, color=is_het)) + geom_point() +
+  stat_function(fun=f, color='black') + theme_bw()
+
+het_genes <- names(which(is_het))
+het_indices <- match(het_genes, rownames(lsce))
+```
+
+Now we can apply laplacian eigenmaps using a nearest-neighbour graph:
+
+```{r le1, cache=TRUE, fig.align='center', message=FALSE, warning=FALSE}
+lsce <- embeddr(lsce, genes_for_embedding = het_indices, nn = 10)
+
+phenoData(lsce)$cluster <- pData(lsce)$putative_cell_type
+plot_embedding(lsce, color_by = 'putative_cell_type')
+plot_graph(lsce)
+```
+
+
+It is obvious we have two very separate trajectories; let's consider the pseudotemporal ordering of one only:
+
+```{r cluster-plot, cache=TRUE, fig.align='center', message=FALSE}
+set.seed(123)
+lsce <- cluster_embedding(lsce, method='mm')#, k = 4)
+plot_embedding(lsce)
+
+cl1 <- pData(lsce)$cluster %in% 1:3
+lsce_13 <- lsce[,cl1]
+
+lsce_13 <- fit_pseudotime(lsce_13)
+lsce_13_tmp <- lsce_13
+phenoData(lsce_13_tmp)$cluster <- plyr::mapvalues(pData(lsce_13_tmp)$cluster,
+                                                 from=1:3,
+                                                 to=c('AT1','BP','AT2'))
+
+plot_embedding(lsce_13_tmp)
+plot_pseudotime_density(lsce_13_tmp, color_by = 'cluster')
+```
+
+
+```{r save-embeddings, cache=TRUE, warning=FALSE, message=FALSE}
+h5file <- "/net/isi-scratch/kieran/GP/gpseudotime/data/embeddings.h5"
+h5createFile(h5file)
+h5createGroup(h5file, "lung")
+h5write(redDim(lsce_13_tmp), h5file, "lung/embedding")
+h5write(pseudotime(lsce_13_tmp), h5file, "lung/pseudotime")
+```
+  
