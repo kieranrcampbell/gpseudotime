@@ -62,12 +62,6 @@ h5write(trace_file, "mh/svar", svar)
 
 
 
-#### Posterior predictive mean
-
-# Posterior predictive mean given by
-# $$ \mathbf{\mu_x} = K^T_* K^{-1} \mathbf{x} $$
-# $$ \mathbf{\mu_y} = K^T_* K^{-1} \mathbf{y} $$
-# where $K_*$ is the covariance matrix between the latent $\mathbf{t}$ and the predictive $\mathbf{t'}$, where typically $\mathbf{t'}$ is sampled as $m$ equally spaced points on the interval [0, 1].
 
 # In[27]:
 
@@ -78,15 +72,9 @@ lambda_map = mean(mh["theta_chain"][:,1])
 sigma_map = mean(mh["theta_chain"][:,2])
 t_map = mean(mh["tchain"], 1)
 
-K_map = covariance_matrix(t_map, lambda_map, sigma_map)
-K_star_transpose = cross_covariance_matrix(tp, t_map, lambda_map)
+mu_map = predict(tp, t_map, lambda_map, sigma_map)
 
-matrix_prefactor = K_star_transpose * inv(K_map)
-
-mu_x = matrix_prefactor * x
-mu_y = matrix_prefactor * y;
-
-h5write(trace_file, "ppm/X", [mu_x mu_y])
+h5write(trace_file, "ppm/X", mu_map)
 
 ### Initialising with multiple chains
 

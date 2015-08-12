@@ -26,7 +26,7 @@ df_synth <- data.frame(x = X[,1], y = X[,2], p1 = pred[,1], p2 = pred[,2], Pseud
 synth_plt <- ggplot(df_synth) + geom_point(aes(x=x, y=y, fill = Pseudotime), 
                               shape = 21, size=3.5, colour = "gray20", alpha = .65) +
   scale_fill_gradient(low = "gold", high = "darkred") + xlab("") + ylab("") +
-  geom_line(aes(x = p1, y = p2), linetype = 1, size = 1.5, colour = "gray10", alpha=.5) +
+  geom_line(aes(x = p1, y = p2), linetype = 1, size = 1.2, colour = "black", alpha=.9) +
   cowplot::theme_cowplot()
 synth_plt
 
