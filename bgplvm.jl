@@ -175,5 +175,30 @@ function B_GPLVM_MH(X, n_iter, burn, t, tvar, theta, theta_var, r = 1, return_bu
                     "burn" => burn}
         }
     return rdict
-end;
+end
 
+#### Posterior predictive mean
+
+# Posterior predictive mean given by
+# $$ \mathbf{\mu_x} = K^T_* K^{-1} \mathbf{x} $$
+# $$ \mathbf{\mu_y} = K^T_* K^{-1} \mathbf{y} $$
+# where $K_*$ is the covariance matrix between the latent $\mathbf{t}$ and the predictive $\mathbf{t'}$, where typically $\mathbf{t'}$ is sampled as $m$ equally spaced points on the interval [0, 1].
+
+
+function predict(tp, t_map, lambda_map, sigma_map)
+    #= Returns MAP prediction of mean function given:
+    @param tp Values of t at which to predict function
+    @param t_map Map estimate of latent pseudotimes
+    @param lambda_map Map estimate of lambda
+    @param sigma_map Map estimate of sigma
+    =#
+    K_map = covariance_matrix(t_map, lambda_map, sigma_map)
+    K_star_transpose = cross_covariance_matrix(tp, t_map, lambda_map)
+
+    matrix_prefactor = K_star_transpose * inv(K_map)
+
+    mu_x = matrix_prefactor * x
+    mu_y = matrix_prefactor * y
+
+    return [mu_x mu_y]
+end
