@@ -6,7 +6,7 @@ pseudotime inference in single-cell RNA-seq data
 kieran.campbell@sjc.ox.ac.uk=#
 
 using Distributions
-
+using Gadfly
 
 function pairwise_distance(t)
     n = length(t)
