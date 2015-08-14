@@ -140,7 +140,7 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
     tchain = zeros((chain_size, n))
     tchain[1,:] = t
 
-    theta_chain = zeros((n_iter + 1), 2)
+    theta_chain = zeros(chain_size, 2)
     theta_chain[1,:] = [lambda, sigma]
     
     accepted = zeros(n_iter)
@@ -241,17 +241,11 @@ end;
 function plot_pseudotime_trace(mh)
     nchoose = 50
     chosen = sample(1:n, nchoose)
-    thin = 1000
+
     df = convert(DataFrame, mh["tchain"][:, chosen])
     df[:iter] = 1:(size(df)[1])
-    df_thin = zeros((int(floor(size(df)[1]) / thin), size(df)[2]))
-
-    for i in 1:(size(df_thin)[1])
-        j = int(thin * (i - 1) + 1)
-        df_thin[i,:] = convert(DataArray, df[j,:])
-    end
-    df_thin = convert(DataFrame, df_thin)
-    df_melted = stack(df_thin, [1:nchoose])
+    df = convert(DataFrame, df)
+    df_melted = stack(df, [1:nchoose])
     names!(df_melted, [symbol(x) for x in ["variable", "value", "iter"]])
 
     return Gadfly.plot(df_melted, x = "iter", y = "value", color = "variable", Geom.line)  
@@ -266,7 +260,8 @@ function plot_kernel_parameter(mh, param)
     return Gadfly.plot(df, x = "iter", y = param, Geom.line)
 end
 
-function plot_posterior_mean(mh, burn, tp, X)
+function plot_posterior_mean(mh, tp, X)
+    burn = mh["params"]["burn_thin"]
     (lambda_map, sigma_map) = mean(mh["theta_chain"][burn:end,:], 1)
     t_map = mean(mh["tchain"][burn:end,:], 1)
     mu_p = predict(tp, t_map, lambda_map, sigma_map, X)
@@ -274,4 +269,16 @@ function plot_posterior_mean(mh, burn, tp, X)
     return Gadfly.plot(layer(x = X[:,1], y = X[:,2], color = t_gt, Geom.point) ,
     layer(x = mu_p[:,1], y = mu_p[:,2], Geom.line(preserve_order = 1), 
     Theme(default_color=color("red"))))
+end
+
+function plot_likelihood(mh)
+    df = convert(DataFrame, mh["loglik_chain"])
+    df[:iter] = 1:(size(df)[1]) # (burn + 2)
+    return Gadfly.plot(df, x = "iter", y = param, Geom.line)
+end
+
+function plot_prior(mh)
+    df = convert(DataFrame, mh["prior_chain"])
+    df[:iter] = 1:(size(df)[1]) # (burn + 2)
+    return Gadfly.plot(df, x = "iter", y = param, Geom.line)
 end
