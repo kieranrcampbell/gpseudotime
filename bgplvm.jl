@@ -124,15 +124,20 @@ function propose_t(t, var, lower = 0, upper = 1)
 end;
 
 
-
-function B_GPLVM_MH(X, n_iter, burn, t, tvar, theta, theta_var, r = 1, return_burn = false)
+function B_GPLVM_MH(X, n_iter, burn, thin, 
+    t, tvar, theta, theta_var, r = 1, return_burn = false)
+    
+    chain_size = int(floor(n_iter / thin)) + 1 # size of the thinned chain
+    burn_thin = int(floor(burn / thin)) # size of the burn region of the thinned chain
+    
     n, ndim = size(X)
     @assert ndim == 2
     
     lambda, sigma = theta
     lvar, svar = theta_var
     
-    tchain = zeros((n_iter + 1, n))
+    ## chains
+    tchain = zeros((chain_size, n))
     tchain[1,:] = t
 
     theta_chain = zeros((n_iter + 1), 2)
@@ -140,6 +145,13 @@ function B_GPLVM_MH(X, n_iter, burn, t, tvar, theta, theta_var, r = 1, return_bu
     
     accepted = zeros(n_iter)
 
+    loglik_chain = zeros(chain_size)
+    prior_chain = zeros(chain_size)
+    
+    loglik_chain[1] = log_likelihood(X, t, [lambda, sigma])
+    prior_chain[1] = corp_prior(t)
+    
+    ## MH
     for i in 1:n_iter
         # proposals
         t_prop = propose_t(t, tvar)
@@ -158,10 +170,19 @@ function B_GPLVM_MH(X, n_iter, burn, t, tvar, theta, theta_var, r = 1, return_bu
             t = t_prop
             (lambda, sigma) = [lambda_prop, sigma_prop]
         end
-        tchain[i+1,:] = t
-        theta_chain[i+1,:] = [lambda, sigma]
+        
+    
+        if i % thin == 0
+            # update traces
+            j = int(i / thin) + 1
+            tchain[j,:] = t
+            theta_chain[j,:] = [lambda, sigma]
+            loglik_chain[j] = log_likelihood(X, t, [lambda, sigma])
+            prior_chain[j] = corp_prior(t)
+        end
     end
-    burnt = burn
+    
+    burnt = burn_thin
     if return_burn
         burnt = 1
     end
@@ -171,11 +192,19 @@ function B_GPLVM_MH(X, n_iter, burn, t, tvar, theta, theta_var, r = 1, return_bu
         "acceptance_rate" => (sum(accepted) / length(accepted)),
         "burn_acceptance_rate" => (sum(accepted[burnt:end]) / length(accepted[burnt:end])),
         "r" => r,
+        "loglik_chain" => loglik_chain,
+        "prior_chain" => prior_chain,
         "params" => {"n_iter" => n_iter,
-                    "burn" => burn}
+                    "burn" => burn,
+                    "thin" => thin,
+                    "burn_thin" => burn_thin
+            }
         }
     return rdict
 end
+
+
+
 
 #### Posterior predictive mean
 
