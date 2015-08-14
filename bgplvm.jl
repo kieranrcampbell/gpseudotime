@@ -7,6 +7,7 @@ kieran.campbell@sjc.ox.ac.uk=#
 
 using Distributions
 using Gadfly
+using DataFrames
 
 function pairwise_distance(t)
     n = length(t)
