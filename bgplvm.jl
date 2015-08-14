@@ -185,7 +185,7 @@ end
 # where $K_*$ is the covariance matrix between the latent $\mathbf{t}$ and the predictive $\mathbf{t'}$, where typically $\mathbf{t'}$ is sampled as $m$ equally spaced points on the interval [0, 1].
 
 
-function predict(tp, t_map, lambda_map, sigma_map)
+function predict(tp, t_map, lambda_map, sigma_map, X)
     #= Returns MAP prediction of mean function given:
     @param tp Values of t at which to predict function
     @param t_map Map estimate of latent pseudotimes
@@ -197,8 +197,11 @@ function predict(tp, t_map, lambda_map, sigma_map)
 
     matrix_prefactor = K_star_transpose * inv(K_map)
 
+    x = X[:,1]
+    y = X[:,2]
+    
     mu_x = matrix_prefactor * x
     mu_y = matrix_prefactor * y
 
     return [mu_x mu_y]
-end
+end;
