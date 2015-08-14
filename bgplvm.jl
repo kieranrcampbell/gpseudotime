@@ -207,7 +207,7 @@ function predict(tp, t_map, lambda_map, sigma_map, X)
 end;
 
 
-## Plotting functions
+#----------- Plotting functions
 
 function plot_pseudotime_trace(mh)
     nchoose = 50
