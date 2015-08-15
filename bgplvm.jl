@@ -273,13 +273,17 @@ function plot_posterior_mean(mh, tp, X)
 end
 
 function plot_likelihood(mh)
-    df = convert(DataFrame, mh["loglik_chain"])
+    df = DataFrame()
+    df[:value] = mh["loglik_chain"]
     df[:iter] = 1:(size(df)[1]) # (burn + 2)
-    return Gadfly.plot(df, x = "iter", y = param, Geom.line)
+    Gadfly.plot(df, x = "iter", y = "value", Geom.line)
 end
 
 function plot_prior(mh)
-    df = convert(DataFrame, mh["prior_chain"])
+    df = DataFrame()
+    df[:value] = mh["prior_chain"]
     df[:iter] = 1:(size(df)[1]) # (burn + 2)
-    return Gadfly.plot(df, x = "iter", y = param, Geom.line)
+    Gadfly.plot(df, x = "iter", y = "value", Geom.line)
 end
+
+
