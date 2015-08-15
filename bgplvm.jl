@@ -59,7 +59,7 @@ function corp_prior(t, r = 1)
     n = length(t)
     for j in 1:n
         for i in (j+1):n
-            ll += log(abs(sin(pi * (t[i] - t[j]))))
+            ll += log(sin(pi * abs(t[i] - t[j])))
         end
     end
     return 2 * r * ll
