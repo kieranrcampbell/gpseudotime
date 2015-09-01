@@ -8,6 +8,7 @@ kieran.campbell@sjc.ox.ac.uk=#
 using Distributions
 using Gadfly
 using DataFrames
+using StatsBase
 
 function pairwise_distance(t)
     n = length(t)
@@ -126,7 +127,7 @@ end;
 
 
 function B_GPLVM_MH(X, n_iter, burn, thin, 
-    t, tvar, theta, theta_var, r = 1, return_burn = false)
+    t, tvar, theta, theta_var, r = 1, return_burn = false, cell_swap = false)
     
     chain_size = int(floor(n_iter / thin)) + 1 # size of the thinned chain
     burn_thin = int(floor(burn / thin)) # size of the burn region of the thinned chain
@@ -150,7 +151,10 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
     prior_chain = zeros(chain_size)
     
     loglik_chain[1] = log_likelihood(X, t, [lambda, sigma])
-    prior_chain[1] = corp_prior(t)
+    prior_chain[1] = corp_prior(t, r)
+
+    alpha_chain = zeros(chain_size - 1)
+    rnd_chain = zeros(chain_size - 1)
     
     ## MH
     for i in 1:n_iter
@@ -159,13 +163,21 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
         lambda_prop = propose(lambda, lvar)
         sigma_prop = propose(sigma, svar)
 
+        if cell_swap
+            # swap two cells at random
+            to_swap = sample(1:length(t), 2, replace = false)
+            t_prop[to_swap] = t_prop[reverse(to_swap)]
+        end
+
         # calculate acceptance ratio
         alpha = acceptance_ratio(X, t_prop, t, 
                                 [lambda_prop, sigma_prop], 
                                 [lambda, sigma], r, 1)
 
+        rnd = log(rand())
+
         # accept - reject
-        if alpha > log(rand())
+        if alpha > rnd
             # accept
             accepted[i] = 1
             t = t_prop
@@ -179,7 +191,9 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
             tchain[j,:] = t
             theta_chain[j,:] = [lambda, sigma]
             loglik_chain[j] = log_likelihood(X, t, [lambda, sigma])
-            prior_chain[j] = corp_prior(t)
+            prior_chain[j] = corp_prior(t, r)
+            alpha_chain[j - 1] = alpha
+            rnd_chain[j - 1] = rnd
         end
     end
     
@@ -199,7 +213,9 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
                     "burn" => burn,
                     "thin" => thin,
                     "burn_thin" => burn_thin
-            }
+            },
+        "alpha_chain" => alpha_chain,
+        "rnd_chain" => rnd_chain
         }
     return rdict
 end
