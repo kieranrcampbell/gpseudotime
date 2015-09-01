@@ -127,13 +127,16 @@ end;
 
 
 function B_GPLVM_MH(X, n_iter, burn, thin, 
-    t, tvar, theta, theta_var, r = 1, return_burn = false, cell_swap = false)
+    t, tvar, theta, theta_var, r = 1, return_burn = false, cell_swap_probability = 0)
     
     chain_size = int(floor(n_iter / thin)) + 1 # size of the thinned chain
     burn_thin = int(floor(burn / thin)) # size of the burn region of the thinned chain
     
     n, ndim = size(X)
     @assert ndim == 2
+
+    @assert cell_swap_probability >= 0
+    @assert cell_swap_probability <= 1
     
     lambda, sigma = theta
     lvar, svar = theta_var
@@ -163,10 +166,12 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
         lambda_prop = propose(lambda, lvar)
         sigma_prop = propose(sigma, svar)
 
-        if cell_swap
-            # swap two cells at random
-            to_swap = sample(1:length(t), 2, replace = false)
-            t_prop[to_swap] = t_prop[reverse(to_swap)]
+        if cell_swap_probability > 0
+            if rand() < cell_swap_probability
+                # swap two cells at random
+                to_swap = sample(1:length(t), 2, replace = false)
+                t_prop[to_swap] = t_prop[reverse(to_swap)]
+            end
         end
 
         # calculate acceptance ratio
@@ -256,7 +261,7 @@ end;
 #----------- Plotting functions
 
 function plot_pseudotime_trace(mh)
-    nchoose = 50
+    nchoose = 4
     chosen = sample(1:n, nchoose)
 
     df = convert(DataFrame, mh["tchain"][:, chosen])
