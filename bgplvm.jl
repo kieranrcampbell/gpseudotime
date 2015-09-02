@@ -44,9 +44,14 @@ function cross_covariance_matrix(t1, t2, lambda)
     return exp(-lambda * T)
 end
 
-function log_likelihood(x, t, theta)
-    lambda, sigma = theta
-    return sum(logpdf(MultivariateNormal(zeros(length(t)), covariance_matrix(t, lambda, sigma)), x))
+function log_likelihood(X, t, lambda, sigma)
+    @assert length(lambda) == length(sigma) == size(X)[2]
+    n, ndim = size(X)
+    ll = 0
+    for i in 1:ndim
+        ll += sum(logpdf(MultivariateNormal(zeros(length(t)), covariance_matrix(t, lambda[i], sigma[i])), X[:,i]))
+    end
+    return ll
 end
 
 ## electroGP
@@ -66,7 +71,20 @@ function corp_prior(t, r = 1)
     return 2 * r * ll
 end
 
-function acceptance_ratio(X, tp, t, thetap, theta, r, s)
+function lambda_prior(lambda, rate = 1.0)
+    lp = sum(logpdf(Exponential(rate), lambda))
+    # lp = 0
+    return lp
+end
+
+function sigma_prior(sigma, alpha = 1.0, beta = 1.0)
+    sp = sum(logpdf(InverseGamma(alpha, beta), sigma))
+    # sp = 0
+    return sp
+end
+
+
+function acceptance_ratio(X, tp, t, lambda_prop, lambda, sigma_prop, sigma, r, s)
     """ 
     Compute the acceptance ratio for 
     @param X N-by-D data array for N points in D dimensions
@@ -77,10 +95,11 @@ function acceptance_ratio(X, tp, t, thetap, theta, r, s)
     @param r > 0 Corp parameter
     @param s Tempering parameter: (log likelihood * prior) is raised to this value
     """
-    likelihood = log_likelihood(X, tp, thetap) - log_likelihood(X, t, theta)
-    prior = corp_prior(tp, r) - corp_prior(t, r)
-    #println(likelihood, " ",  prior)
-    return s * (likelihood + prior) 
+    likelihood = log_likelihood(X, tp, lambda_prop, sigma_prop) - log_likelihood(X, t, lambda, sigma)
+    t_prior = corp_prior(tp, r) - corp_prior(t, r)
+    l_prior = lambda_prior(lambda_prop) - lambda_prior(lambda)
+    s_prior = sigma_prior(sigma_prop) - sigma_prior(sigma)
+    return s * (likelihood + t_prior + l_prior + s_prior) 
 end
 
 function couple_update_acceptance_ratio(X, t1, t2, theta1, theta2, r, s1, s2)
@@ -113,9 +132,11 @@ function sample_t(t, var)
     return tprop
 end
 
-function propose(mean::Real, var::Real, lower = 0, upper = Inf)
+# TODO: propose and propose_t now same function
+function propose(mean, var, lower = 0, upper = Inf)
     # sample from truncated normal of (mean, real)
-    return rand(Truncated(Normal(mean, var), lower, upper))
+    n = length(mean)
+    return [rand(Truncated(Normal(mean[i], var[i]), lower, upper)) for i in 1:n]
 end
 
 function propose_t(t, var, lower = 0, upper = 1)
@@ -127,37 +148,42 @@ end;
 
 
 function B_GPLVM_MH(X, n_iter, burn, thin, 
-    t, tvar, theta, theta_var, r = 1, return_burn = false, cell_swap_probability = 0)
+    t, tvar, lambda, lvar, sigma, svar, 
+    r = 1, return_burn = false, cell_swap_probability = 0)
     
     chain_size = int(floor(n_iter / thin)) + 1 # size of the thinned chain
     burn_thin = int(floor(burn / thin)) # size of the burn region of the thinned chain
     
     n, ndim = size(X)
-    @assert ndim == 2
 
+    @assert ndim == 2 # for now
     @assert cell_swap_probability >= 0
     @assert cell_swap_probability <= 1
-    
-    lambda, sigma = theta
-    lvar, svar = theta_var
-    
+    @assert length(lambda) == length(sigma) == ndim
+    @assert burn < n_iter
+    @assert length(t) == n
+    @assert length(lvar) == length(svar) == ndim
+
     ## chains
     tchain = zeros((chain_size, n))
     tchain[1,:] = t
 
-    theta_chain = zeros(chain_size, 2)
-    theta_chain[1,:] = [lambda, sigma]
+    lambda_chain = zeros(chain_size, ndim)
+    lambda_chain[1,:] = lambda
+
+    sigma_chain = zeros(chain_size, ndim)
+    sigma_chain[1,:] = sigma
     
     accepted = zeros(n_iter)
 
     loglik_chain = zeros(chain_size)
     prior_chain = zeros(chain_size)
     
-    loglik_chain[1] = log_likelihood(X, t, [lambda, sigma])
+    loglik_chain[1] = log_likelihood(X, t, lambda, sigma)
     prior_chain[1] = corp_prior(t, r)
 
-    alpha_chain = zeros(chain_size - 1)
-    rnd_chain = zeros(chain_size - 1)
+    # alpha_chain = zeros(chain_size - 1)
+    # rnd_chain = zeros(chain_size - 1)
     
     ## MH
     for i in 1:n_iter
@@ -176,8 +202,8 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
 
         # calculate acceptance ratio
         alpha = acceptance_ratio(X, t_prop, t, 
-                                [lambda_prop, sigma_prop], 
-                                [lambda, sigma], r, 1)
+                                lambda_prop, lambda, sigma_prop, 
+                                sigma, r, 1)
 
         rnd = log(rand())
 
@@ -186,7 +212,8 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
             # accept
             accepted[i] = 1
             t = t_prop
-            (lambda, sigma) = [lambda_prop, sigma_prop]
+            lambda = lambda_prop
+            sigma = sigma_prop
         end
         
     
@@ -194,11 +221,10 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
             # update traces
             j = int(i / thin) + 1
             tchain[j,:] = t
-            theta_chain[j,:] = [lambda, sigma]
-            loglik_chain[j] = log_likelihood(X, t, [lambda, sigma])
+            lambda_chain[j,:] = lambda
+            sigma_chain[j,:] = sigma
+            loglik_chain[j] = log_likelihood(X, t, lambda, sigma)
             prior_chain[j] = corp_prior(t, r)
-            alpha_chain[j - 1] = alpha
-            rnd_chain[j - 1] = rnd
         end
     end
     
@@ -208,7 +234,8 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
     end
     
     rdict = {"tchain" => tchain[burnt:end,:],
-        "theta_chain" => theta_chain[burnt:end,:],
+        "lambda_chain" => lambda_chain[burnt:end,:],
+        "sigma_chain" => sigma_chain[burnt:end,:],
         "acceptance_rate" => (sum(accepted) / length(accepted)),
         "burn_acceptance_rate" => (sum(accepted[burnt:end]) / length(accepted[burnt:end])),
         "r" => r,
@@ -218,9 +245,7 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
                     "burn" => burn,
                     "thin" => thin,
                     "burn_thin" => burn_thin
-            },
-        "alpha_chain" => alpha_chain,
-        "rnd_chain" => rnd_chain
+            }
         }
     return rdict
 end
@@ -243,18 +268,23 @@ function predict(tp, t_map, lambda_map, sigma_map, X)
     @param lambda_map Map estimate of lambda
     @param sigma_map Map estimate of sigma
     =#
-    K_map = covariance_matrix(t_map, lambda_map, sigma_map)
-    K_star_transpose = cross_covariance_matrix(tp, t_map, lambda_map)
+    @assert length(lambda_map) == length(sigma_map) == size(X)[2]
+    @assert length(t_map) == size(X)[1]
+    ndim = size(X)[2]
+    np = length(tp)
 
-    matrix_prefactor = K_star_transpose * inv(K_map)
+    Xp = fill(0.0, (np, ndim))
+    for i in 1:ndim
+        K_map = covariance_matrix(t_map, lambda_map[i], sigma_map[i])
+        K_star_transpose = cross_covariance_matrix(tp, t_map, lambda_map[i])
 
-    x = X[:,1]
-    y = X[:,2]
+        matrix_prefactor = K_star_transpose * inv(K_map)
 
-    mu_x = matrix_prefactor * x
-    mu_y = matrix_prefactor * y
+        mu = matrix_prefactor * X[:,i]
+        Xp[:,i] = vec(mu)   
+    end
 
-    return [mu_x mu_y]
+    return Xp
 end;
 
 
@@ -274,17 +304,22 @@ function plot_pseudotime_trace(mh)
 end
 
 function plot_kernel_parameter(mh, param)
-    df = convert(DataFrame, mh["theta_chain"])
+    chain_name = string(param, "_chain")
 
-    names!(df, [symbol(x) for x in ["lambda", "sigma"]])
+    df = convert(DataFrame, mh[chain_name])
+    ndim = size(df)[2]
+
+    names!(df, [symbol(string(param, string(i))) for i in 1:ndim])
     df[:iter] = 1:(size(df)[1]) # (burn + 2)
-    df_melted = stack(df, [1:2]);
-    return Gadfly.plot(df, x = "iter", y = param, Geom.line)
+    df_melted = stack(df, [1:2])
+    return Gadfly.plot(df_melted, x = "iter", y = "value", colour = "variable", Geom.line)
 end
 
 function plot_posterior_mean(mh, tp, X)
     burn = mh["params"]["burn_thin"]
-    (lambda_map, sigma_map) = mean(mh["theta_chain"][burn:end,:], 1)
+    lambda_map = mean(mh["lambda_chain"][burn:end,:], 1)
+    sigma_map = mean(mh["sigma_chain"][burn:end,:], 1)
+
     t_map = mean(mh["tchain"][burn:end,:], 1)
     mu_p = predict(tp, t_map, lambda_map, sigma_map, X)
 
