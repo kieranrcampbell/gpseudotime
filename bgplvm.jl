@@ -84,7 +84,7 @@ function sigma_prior(sigma, alpha = 1.0, beta = 1.0)
 end
 
 
-function acceptance_ratio(X, tp, t, lambda_prop, lambda, sigma_prop, sigma, r, s)
+function acceptance_ratio(X, tp, t, lambda_prop, lambda, sigma_prop, sigma, r, s, gamma)
     """ 
     Compute the acceptance ratio for 
     @param X N-by-D data array for N points in D dimensions
@@ -97,7 +97,7 @@ function acceptance_ratio(X, tp, t, lambda_prop, lambda, sigma_prop, sigma, r, s
     """
     likelihood = log_likelihood(X, tp, lambda_prop, sigma_prop) - log_likelihood(X, t, lambda, sigma)
     t_prior = corp_prior(tp, r) - corp_prior(t, r)
-    l_prior = lambda_prior(lambda_prop) - lambda_prior(lambda)
+    l_prior = lambda_prior(lambda_prop, gamma) - lambda_prior(lambda, gamma)
     s_prior = sigma_prior(sigma_prop) - sigma_prior(sigma)
     return s * (likelihood + t_prior + l_prior + s_prior) 
 end
@@ -149,7 +149,8 @@ end;
 
 function B_GPLVM_MH(X, n_iter, burn, thin, 
     t, tvar, lambda, lvar, sigma, svar, 
-    r = 1, return_burn = false, cell_swap_probability = 0)
+    r = 1, return_burn = false, cell_swap_probability = 0,
+    gamma)
     
     chain_size = int(floor(n_iter / thin)) + 1 # size of the thinned chain
     burn_thin = int(floor(burn / thin)) # size of the burn region of the thinned chain
@@ -203,7 +204,7 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
         # calculate acceptance ratio
         alpha = acceptance_ratio(X, t_prop, t, 
                                 lambda_prop, lambda, sigma_prop, 
-                                sigma, r, 1)
+                                sigma, r, 1, gamma)
 
         rnd = log(rand())
 
