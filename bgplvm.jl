@@ -150,7 +150,7 @@ end;
 function B_GPLVM_MH(X, n_iter, burn, thin, 
     t, tvar, lambda, lvar, sigma, svar, 
     r = 1, return_burn = false, cell_swap_probability = 0,
-    gamma)
+    gamma = 1.0)
     
     chain_size = int(floor(n_iter / thin)) + 1 # size of the thinned chain
     burn_thin = int(floor(burn / thin)) # size of the burn region of the thinned chain

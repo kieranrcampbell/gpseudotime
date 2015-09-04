@@ -73,7 +73,7 @@ return_burn = true # should the burn period be returned in the traces?
 cell_swap_probability = 0 # randomly swap two cells at each stage?
 
 mh = B_GPLVM_MH(X, n_iter, burn, thin, t, tvar, lambda, lvar, 
-                sigma, svar, r, return_burn, cell_swap_probability)
+                sigma, svar, r, return_burn, cell_swap_probability, gamma)
 
 ## write things to file
 base_h5 = string("gamma", gamma)
