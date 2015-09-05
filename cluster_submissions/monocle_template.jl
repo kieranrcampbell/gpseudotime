@@ -14,7 +14,7 @@ include("../bgplvm.jl"); # load in inference & plotting methods;
 
 X = readcsv("../data/X.csv")
 t_gt = readcsv("../data/t_gt.csv")
-s
+
 
 # remove cells less than 0 on x
 to_keep = X[:,1] .> 0
