@@ -12,15 +12,9 @@ include("../bgplvm.jl"); # load in inference & plotting methods;
 
 # In[2]:
 
-X = h5read("../data/embeddings.h5", "monocle/embedding")
-t_gt = h5read("../data/embeddings.h5", "monocle/pseudotime");
-
-
-# In[3]:
-
-
-
-# In[4]:
+X = readcsv("../data/X.csv")
+t_gt = readcsv("../data/t_gt.csv")
+s
 
 # remove cells less than 0 on x
 to_keep = X[:,1] .> 0
@@ -79,11 +73,18 @@ mh = B_GPLVM_MH(X, n_iter, burn, thin, t, tvar, lambda, lvar,
 base_h5 = string("gamma", gamma)
 qoi = ("tchain", "lambda_chain", "sigma_chain",
     "burn_acceptance_rate")
+
 for q in qoi
-    h5write("../data/gamma_tests.h5",
-        string(base_h5, "/", q), mh[q])
+    filename = string("../data/", base_h5, "_", q, ".csv")
+    writecsv(filename, mh[q])
 end
 
-h5write("../data/gamma_tests.h5",
-    string(base_h5, "/burn_thin"), mh["params"]["burn_thin"])
+filename = string("../data/", base_h5, "_burn_thin.csv")
+
+writecsv(filename, mh["params"]["burn_thin"])
+
+
+
+
+
 
