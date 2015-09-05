@@ -14,7 +14,7 @@ include("../bgplvm.jl"); # load in inference & plotting methods;
 
 X = readcsv("../data/X.csv")
 t_gt = readcsv("../data/t_gt.csv")
-s
+
 
 # remove cells less than 0 on x
 to_keep = X[:,1] .> 0
@@ -42,10 +42,10 @@ srand(123)
 
 n = size(X)[1]
 
-n_iter = 200
+n_iter = 300000
 burn = n_iter / 2
 
-thin = 1
+thin = 500
 
 # pseudotime parameters
 eps = 1e-6
