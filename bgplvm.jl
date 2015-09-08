@@ -345,3 +345,19 @@ function plot_prior(mh)
 end
 
 
+
+#----------------------- Variance measures
+
+
+function kendall_tau(mh)
+    #= Calculates the kendall tau non-parametric correlation
+    measure along the chain between consecutive pseudotimes
+    returning a vector of length (N - 1) =#
+    bt = mh["params"]["burn_thin"]
+    tchain = mh["tchain"][bt:end,:]
+    kt = zeros(size(tchain)[1] - 1)
+    for i in 1:length(kt)
+        kt[i] = corkendall(vec(tchain[i+1,:]), vec(tchain[i,:]))
+    end
+    return kt
+end
