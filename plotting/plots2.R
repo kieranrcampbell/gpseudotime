@@ -122,15 +122,34 @@ plot_mean_curve <- function(fname) {
 }
 
 
-fnames <- list()
-fnames[[1]] <- c("data/gamma1.0_tchain.csv", "data/gamma1.0_sigma_chain.csv", "data/gamma1.0_lambda_chain.csv")
-fnames[[2]] <- c("data/gamma10.0_tchain.csv", "data/gamma10.0_sigma_chain.csv", "data/gamma10.0_lambda_chain.csv")
-fnames[[3]] <- c("data/gamma50.0_tchain.csv", "data/gamma50.0_sigma_chain.csv", "data/gamma50.0_lambda_chain.csv")
+gnames <- list()
+gnames[[1]] <- c("data/gamma1.0_tchain.csv", "data/gamma1.0_sigma_chain.csv", "data/gamma1.0_lambda_chain.csv")
+gnames[[2]] <- c("data/gamma10.0_tchain.csv", "data/gamma10.0_sigma_chain.csv", "data/gamma10.0_lambda_chain.csv")
+gnames[[3]] <- c("data/gamma50.0_tchain.csv", "data/gamma50.0_sigma_chain.csv", "data/gamma50.0_lambda_chain.csv")
 
-plots <- lapply(fnames, plot_all)
+plots <- lapply(gnames, plot_all)
 
 pdf(file = "plotting/vary_gamma.pdf")
 plots[[1]]
 plots[[2]]
 plots[[3]]
+dev.off()
+
+rnames <- list()
+rnames[[1]] <- c("data/r0.1_tchain.csv", "data/r0.1_sigma_chain.csv", "data/r0.1_lambda_chain.csv")
+rnames[[2]] <- c("data/r0.01_tchain.csv", "data/r0.01_sigma_chain.csv", "data/r0.01_lambda_chain.csv")
+rnames[[3]] <- c("data/r0.001_tchain.csv", "data/r0.001_sigma_chain.csv", "data/r0.001_lambda_chain.csv")
+
+rplots <- lapply(rnames, plot_all)
+pdf(file = "plotting/vary_r.pdf")
+rplots[[1]]
+rplots[[2]]
+rplots[[3]]
+dev.off()
+
+tnames <- c("data/template_large_iter_tchain.csv", 
+            "data/template_large_iter_sigma_chain.csv", 
+            "data/template_large_iter_lambda_chain.csv")
+pdf("plotting/longiter.pdf", width=9, height=10)
+plot_all(tnames)
 dev.off()

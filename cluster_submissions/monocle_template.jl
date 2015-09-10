@@ -4,7 +4,7 @@
 # In[217]:
 
 using Gadfly
-using HDF5
+
 using DataFrames
 
 include("../bgplvm.jl"); # load in inference & plotting methods;
@@ -13,7 +13,7 @@ include("../bgplvm.jl"); # load in inference & plotting methods;
 # In[2]:
 
 X = readcsv("../data/X.csv")
-t_gt = readcsv("../data/t_gt.csv")
+t_gt = vec(readcsv("../data/t_gt.csv"))
 
 
 # remove cells less than 0 on x
@@ -42,7 +42,7 @@ srand(123)
 
 n = size(X)[1]
 
-n_iter = 300000
+n_iter = 500000
 burn = n_iter / 2
 
 thin = 500
@@ -59,9 +59,9 @@ sigma = [.5, .5]
 lvar = [1e-2, 1e-2] * .9
 svar = [1e-2, 1e-2] * .8
 
-r = 1e-3 # repulsion parameter
+r = 1e-1 # repulsion parameter
 
-gamma = 1.0
+gamma = 10.0
 
 return_burn = true # should the burn period be returned in the traces?
 cell_swap_probability = 0 # randomly swap two cells at each stage?
@@ -70,7 +70,7 @@ mh = B_GPLVM_MH(X, n_iter, burn, thin, t, tvar, lambda, lvar,
                 sigma, svar, r, return_burn, cell_swap_probability, gamma)
 
 ## write things to file
-base_h5 = string("gamma", gamma)
+base_h5 = string("r", r)
 qoi = ("tchain", "lambda_chain", "sigma_chain",
     "burn_acceptance_rate")
 
@@ -82,9 +82,3 @@ end
 filename = string("../data/", base_h5, "_burn_thin.csv")
 
 writecsv(filename, mh["params"]["burn_thin"])
-
-
-
-
-
-

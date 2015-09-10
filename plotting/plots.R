@@ -7,6 +7,8 @@ library(rhdf5)
 library(dplyr)
 library(reshape2)
 library(magrittr)
+library(modeest)
+library(coda)
 
 # Functions for covariance matrix calcualtion ---------
 
@@ -52,10 +54,11 @@ ll <- h5read(h5file, "mh/log_lik")
 prior <- h5read(h5file, "mh/prior")
 
 # Compute posterior mean estimates -----
+get_map <- function(x) mlv(x,method = "HSM")$M
 burn <- as.integer(nrow(tchain) / 2)
-tmap <- colMeans(tchain[burn:nrow(tchain),])
-lmap <- colMeans(lchain[burn:nrow(lchain),])
-smap <- colMeans(schain[burn:nrow(schain),])
+tmap <- apply(tchain[burn:nrow(tchain),], 2, get_map )
+lmap <- apply(lchain[burn:nrow(lchain),], 2, get_map )
+smap <- apply(schain[burn:nrow(schain),], 2, get_map )
 
 
 tp <- runif(200, min = 0, max = 1)
@@ -79,8 +82,8 @@ df_mu <- arrange(df_mu, t)
 embedded_plt <- ggplot() + geom_point(data = df_x, aes(x = x1, y = x2, fill = tmap), color = "gray20", 
                                       alpha = 0.65, size = 3.5, shape = 21) +
   geom_path(data = df_mu, aes(x = mu1, y = mu2, colour = t), size = 3, alpha = 0.7) +
-  scale_fill_continuous_tableau() + scale_color_continuous_tableau()
-embedded_plt + ggtitle("Posterior mean curve")
+  scale_fill_continuous_tableau() + scale_color_continuous_tableau() + guides(fill = FALSE, colour = FALSE)
+embedded_plt 
 
 # Pseudotime Traces ------------------------------------------------------------------
 
@@ -101,71 +104,40 @@ df_converge <- dfm %>%
   filter(Cell %in% to_sample_trace) %>%
   filter(Iteration > (as.integer(max(Iteration) / 2)))
 
-
+# data for big-bang initialisation
 df_bigbang <- dfm %>%
   filter(Cell %in% to_sample_bb) %>%
   filter(Iteration < as.integer(max(Iteration) / 50))
 
 pst_trace_plt <- ggplot(df_converge) + geom_line(aes(x=Iteration, y=Pseudotime, colour = Cell)) +
-  ggtitle("MCMC traces") + guides(colour = FALSE) + cowplot::theme_cowplot()
-pst_trace_plt
+   guides(fill = FALSE, colour = FALSE) + cowplot::theme_cowplot()
+# pst_trace_plt
 
 bb_plt <- ggplot(df_bigbang) + geom_line(aes(x=Iteration, y=Pseudotime, colour = Cell)) +
-  ggtitle("MCMC traces") + guides(colour = FALSE) + cowplot::theme_cowplot()
-bb_plt
-
-
-# Kernel parameter traces -------------------------------------------------
-theta_chain <- h5read(h5file, "mh/theta_chain")
-dft <- data.frame(theta_chain)
-names(dft) <- c("Lambda", "Sigma")
-dft <- dft[c(TRUE, rep(FALSE, 9)),]
-dft$Iteration <- 10*(1:nrow(dft))
-dftm <- melt(dft, id.vars = "Iteration", variable.name = "Parameter", value.name = "Value")
-
-kern_plt <- ggplot(dftm) + geom_line(aes(x=Iteration, y=Value)) + 
-  facet_wrap(~Parameter, scales = "free_y", nrow = 2) +
-  cowplot::theme_cowplot() + ggtitle("Kernel parameter MCMC traces")
-
-
-
+    guides(colour = FALSE) + cowplot::theme_cowplot()
+#bb_plt
 
 # Multiple chain vs ground truth ------------------------------------------
 
-nchains <- h5read(h5file, "multi/nchains")
-tmeans <- vector("list", nchains)
-theta_means <- vector("list", nchains)
+df <- data.frame(t = t_gt, tmap = tmap)
+tburn <- tchain[burn:nrow(tchain),]
+thpd <- apply(tburn, 2, function(x) HPDinterval(mcmc(x))[1,])
+df$lower <- thpd[1,]
+df$higher <- thpd[2,]
 
-for(i in 1:nchains) {
-  tm <- paste0("multi/chain", i)
-  tchaini <- h5read(h5file, paste0(tm, "/tchain"))
-  theta_chaini <- h5read(h5file, paste0(tm, "/theta_chain"))
-  
-  ## thin
-  tchaini <- tchaini[c(TRUE, rep(FALSE, 9)), ]
-  theta_chaini <- theta_chaini[c(TRUE, rep(FALSE, 9)),]
-  
-  tmeans[[i]] <- colMeans(tchaini)
-  theta_means[[i]] <- colMeans(theta_chaini)
-}
-
-df_tmeans <- data.frame(do.call(cbind, tmeans))
-df_thmeans <- data.frame(do.call(cbind, theta_means))
-
-names(df_tmeans) <- as.character(1:nchains) # paste0("Chain", 1:nchains)
-df_tmeans$Pseudotime <- t_gt
-
-df_melted <- melt(df_tmeans, id.vars="Pseudotime", variable.name="Chain", value.name="Posterior")
-
-pm_plt <- ggplot(df_melted) + 
-  geom_point(aes(x=Pseudotime, y=Posterior, fill=Chain), size = 3, alpha = .8, shape = 21, colour = "gray20") +
-  cowplot::theme_cowplot() + xlab("True pseudotime value") + ylab("Posterior mean")
-pm_plt
+comp_plt <- ggplot(df) + geom_point(aes(x = t, y = tmap), size = 3, shape = 2) +
+  geom_errorbar(aes(ymax = higher, ymin = lower, x = t), width = 0.01, alpha = 0.5, colour = "darkred") +
+  stat_function(fun = function(x) x ) + ylab("Pseudotime MAP estimate") +
+  xlab("'True' pseudotime") 
 
 # Save all plots ----------------------------------------------------------
 
-ggsave("synth.png", synth_plt, width=8, height = 5)
+ggsave("embedding.png", embedded_plt, width=8, height = 5)
 ggsave("pst_traces.png", pst_trace_plt, width=8, height =5)
-ggsave("kern_plt.png", kern_plt, width=8, height =5)
-ggsave("pos_mean.png", pm_plt, width=8, height=5)
+ggsave("bb.png", bb_plt, width=8, height =5)
+ggsave("pos_mean.png", comp_plt, width=8, height=5)
 
+grid <- plot_grid(embedded_plt, comp_plt, pst_trace_plt, bb_plt, 
+                  nrow = 2, labels = c("A", "B", "C", "D"))
+
+cowplot::ggsave(filename = "all.png", plot = grid, width = 8, height = 5, scale = 2)

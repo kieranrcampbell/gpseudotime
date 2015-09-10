@@ -27,14 +27,11 @@ library(plyr)
 library(dplyr) 
 library(ggplot2)
 library(ggthemes)
-library(caret) ## for cross validation steps
+library(rhdf5)
 library(scater) ## to hold single-cell data
-library(knitr) ## for kable function
-library(goseq) ## for GO enrichment
-library(org.Hs.eg.db) ## for HG19 GO annotations
+
 library(embeddr)
 library(cowplot)
-library(rhdf5)
 ```
 
 
@@ -143,6 +140,7 @@ h5createFile(h5file)
 h5createGroup(h5file, "monocle")
 h5write(redDim(sce_23), h5file, "monocle/embedding")
 h5write(pseudotime(sce_23), h5file, "monocle/pseudotime")
+h5write(sce_23$proj_dist, h5file, "monocle/hdnoise")
 ```
   
   
