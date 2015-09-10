@@ -10,6 +10,8 @@ library(magrittr)
 library(modeest)
 library(coda)
 
+thin <- 100
+
 # Functions for covariance matrix calcualtion ---------
 
 cov_mat <- function(t, lambda, sigma) {
@@ -95,7 +97,7 @@ names(dftchain) <- paste0('t', 1:ncol(dftchain))
 to_sample_bb <- paste0('t', sample(ncol(dftchain), 30, replace = FALSE))
 to_sample_trace <- paste0('t', sample(ncol(dftchain), 10, replace = FALSE))
 
-dftchain$Iteration <- 10*(1:nrow(dftchain))
+dftchain$Iteration <- thin*(1:nrow(dftchain))
 
 dfm <- melt(dftchain, id.vars = "Iteration", variable.name = "Cell", value.name = "Pseudotime")
 
@@ -140,4 +142,4 @@ ggsave("pos_mean.png", comp_plt, width=8, height=5)
 grid <- plot_grid(embedded_plt, comp_plt, pst_trace_plt, bb_plt, 
                   nrow = 2, labels = c("A", "B", "C", "D"))
 
-cowplot::ggsave(filename = "all.png", plot = grid, width = 8, height = 5, scale = 2)
+cowplot::ggsave(filename = "all.png", plot = grid, width = 3, height = 2, scale = 3.5)
