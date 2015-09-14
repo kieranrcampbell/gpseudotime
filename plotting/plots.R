@@ -129,7 +129,7 @@ df$higher <- thpd[2,]
 
 comp_plt <- ggplot(df) + geom_point(aes(x = t, y = tmap), size = 3, shape = 2) +
   geom_errorbar(aes(ymax = higher, ymin = lower, x = t), width = 0.01, alpha = 0.5, colour = "darkred") +
-  stat_function(fun = function(x) x ) + ylab("Pseudotime MAP estimate") +
+  stat_function(fun = function(x) 1 - x ) + ylab("Pseudotime MAP estimate") +
   xlab("'True' pseudotime") 
 
 # Save all plots ----------------------------------------------------------

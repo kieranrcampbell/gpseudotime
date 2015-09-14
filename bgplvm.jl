@@ -77,15 +77,20 @@ function lambda_prior(lambda, rate = 1.0)
     return lp
 end
 
-function sigma_prior(sigma, rate = 1.0)
-    # sp = sum(logpdf(InverseGamma(alpha, beta), sigma))
-    sp = sum(logpdf(Exponential(rate), sigma))
-    # sp = 0
+# function sigma_prior(sigma, rate = 1.0)
+#     # sp = sum(logpdf(InverseGamma(alpha, beta), sigma))
+#     sp = sum(logpdf(Exponential(rate), sigma))
+#     # sp = 0
+#     return sp
+# end
+
+function sigma_prior(sigma, alpha = 1.0, beta = 1.0)
+    sp = sum(logpdf(InverseGamma(alpha, beta), sigma))
     return sp
 end
 
 
-function acceptance_ratio(X, tp, t, lambda_prop, lambda, sigma_prop, sigma, r, s, gamma, delta)
+function acceptance_ratio(X, tp, t, lambda_prop, lambda, sigma_prop, sigma, r, s, gamma)
     """ 
     Compute the acceptance ratio for 
     @param X N-by-D data array for N points in D dimensions
@@ -95,6 +100,7 @@ function acceptance_ratio(X, tp, t, lambda_prop, lambda, sigma_prop, sigma, r, s
     @param theta Previous theta
     @param r > 0 Corp parameter
     @param s Tempering parameter: (log likelihood * prior) is raised to this value
+    @param gamma Rate for exponential prior on lambda
     """
     likelihood = log_likelihood(X, tp, lambda_prop, sigma_prop) - log_likelihood(X, t, lambda, sigma)
     t_prior = corp_prior(tp, r) - corp_prior(t, r)
@@ -108,17 +114,17 @@ function couple_update_acceptance_ratio(X, t1, t2, theta1, theta2, r, s1, s2)
     return  ( (s1 - s2) * ( h(X, t2, theta2, r) - h(X, t1, theta1, r) ) )
 end
 
-function acceptance_ratio_likelihood_only(X, tp, t, thetap, theta, r, s)
-    """ 
-    Same as acceptance ratio except only the log_likelihood is raised to s
+# function acceptance_ratio_likelihood_only(X, tp, t, thetap, theta, r, s)
+#     """ 
+#     Same as acceptance ratio except only the log_likelihood is raised to s
     
-    @param s Tempering parameter: (log likelihood) is raised to this value
-    """
-    likelihood = log_likelihood(X, tp, thetap) - log_likelihood(X, t, theta)
-    prior = corp_prior(tp, r) - corp_prior(t, r)
-    #println(likelihood, " ",  prior)
-    return s * likelihood + prior 
-end
+#     @param s Tempering parameter: (log likelihood) is raised to this value
+#     """
+#     likelihood = log_likelihood(X, tp, thetap) - log_likelihood(X, t, theta)
+#     prior = corp_prior(tp, r) - corp_prior(t, r)
+#     #println(likelihood, " ",  prior)
+#     return s * likelihood + prior 
+# end
 
 function couple_update_acceptance_ratio_likelihood_only(X, t1, t2, theta1, theta2, r, s1, s2)
     """ Same as couple_acceptance_ratio except only the likelihood is raised to s """
@@ -151,7 +157,7 @@ end;
 function B_GPLVM_MH(X, n_iter, burn, thin, 
     t, tvar, lambda, lvar, sigma, svar, 
     r = 1, return_burn = false, cell_swap_probability = 0,
-    gamma = 1.0, delta = 1.0)
+    gamma = 1.0)
     
     chain_size = int(floor(n_iter / thin)) + 1 # size of the thinned chain
     burn_thin = int(floor(burn / thin)) # size of the burn region of the thinned chain
@@ -205,7 +211,7 @@ function B_GPLVM_MH(X, n_iter, burn, thin,
         # calculate acceptance ratio
         alpha = acceptance_ratio(X, t_prop, t, 
                                 lambda_prop, lambda, sigma_prop, 
-                                sigma, r, 1, gamma, delta)
+                                sigma, r, 1, gamma)
 
         rnd = log(rand())
 
