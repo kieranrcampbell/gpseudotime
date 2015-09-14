@@ -1,0 +1,148 @@
+
+# Generate plots for Bayesian Gaussian process latent variable models
+# kieran.campbell@sjc.ox.ac.uk
+
+library(ggplot2)
+library(rhdf5)
+library(dplyr)
+library(reshape2)
+library(magrittr)
+library(modeest)
+library(coda)
+
+thin <- 100
+
+# Functions for covariance matrix calcualtion ---------
+
+cov_mat <- function(t, lambda, sigma) {
+  tt <- as.matrix(dist(t))^2
+  S <- exp(-lambda * tt) + sigma * diag(length(t))
+  S
+}
+
+cross_cov_mat <- function(t1, t2, lambda, sigma) {
+  n1 <- length(t1)
+  n2 <- length(t2)
+  tt <- matrix(0, nrow = n1, ncol = n2)
+  for(i in 1:n1) {
+    for(j in 1:n2) {
+      tt[i, j] <- (t1[i] - t2[j])^2
+    }
+  }
+  # tt <- tt + t(tt)
+  S <- exp(-lambda * tt)
+  S
+}
+
+# Analysis starts here --------------
+
+setwd("/net/isi-scratch/kieran/GP/gpseudotime/plotting/")
+
+h5file <- "../data/monocle_traces.h5"
+h5ls(h5file)
+
+# Read in traces and params
+t_gt <- h5read(h5file, "t_gt")
+X <- h5read(h5file, "X")
+
+tchain <- h5read(h5file, "tchain")
+lchain <- h5read(h5file, "lambda_chain")
+schain <- h5read(h5file, "sigma_chain")
+# ll <- h5read(h5file, "mh/log_lik")
+# prior <- h5read(h5file, "mh/prior")
+
+# Compute posterior mean estimates -----
+get_map <- function(x) mlv(x,method = "HSM")$M
+burn <- as.integer(nrow(tchain) / 2)
+tmap <- apply(tchain[burn:nrow(tchain),], 2, get_map )
+lmap <- apply(lchain[burn:nrow(lchain),], 2, get_map )
+smap <- apply(schain[burn:nrow(schain),], 2, get_map )
+
+
+tp <- runif(200, min = 0, max = 1)
+mu <- matrix(NA, ncol = 2, nrow = length(tp))
+
+for(i in 1:2) {
+  K_map <- cov_mat(tmap, lmap[i], smap[i])
+  K_star_transpose <- cross_cov_mat(tp, tmap, lmap[i], smap[i])
+  matrix_prefactor <- K_star_transpose %*% solve(K_map)
+  mu[,i] <- matrix_prefactor %*% X[,i]
+}
+
+# Main plot -------
+
+df_x <- data.frame(cbind(X, tmap))
+names(df_x) <- c("x1", "x2", "tmap")
+df_mu <- data.frame(cbind(mu, tp))
+names(df_mu) <- c("mu1", "mu2", "t")
+df_mu <- arrange(df_mu, t)
+
+embedded_plt <- ggplot() + geom_point(data = df_x, aes(x = x1, y = x2, fill = tmap), color = "gray20", 
+                                      alpha = 0.65, size = 3.5, shape = 21) +
+  geom_path(data = df_mu, aes(x = mu1, y = mu2, colour = t), size = 3, alpha = 0.7) +
+  scale_fill_continuous_tableau() + scale_color_continuous_tableau() + guides(fill = FALSE, colour = FALSE)
+embedded_plt 
+
+# Pseudotime Traces ------------------------------------------------------------------
+
+## start by thinning the tchain a little
+set.seed(12)
+dftchain <- data.frame(tchain)
+names(dftchain) <- paste0('t', 1:ncol(dftchain))
+
+to_sample_trace <- paste0('t', sample(ncol(dftchain), 12, replace = FALSE))
+
+dftchain$Iteration <- thin*(1:nrow(dftchain))
+
+dfm <- melt(dftchain, id.vars = "Iteration", variable.name = "Cell", value.name = "Pseudotime")
+
+# data frame for converged trace (after burn in)
+df_converge <- dfm %>% 
+  filter(Cell %in% to_sample_trace) %>%
+  filter(Iteration > (as.integer(max(Iteration) / 2)))
+
+pst_trace_plt <- ggplot(df_converge) + geom_line(aes(x=Iteration, y=Pseudotime, colour = Cell)) +
+   guides(fill = FALSE, colour = FALSE) + cowplot::theme_cowplot()
+pst_trace_plt
+
+# Multiple chain vs ground truth ------------------------------------------
+
+df <- data.frame(t = t_gt, tmap = tmap)
+tburn <- tchain[burn:nrow(tchain),]
+thpd <- apply(tburn, 2, function(x) HPDinterval(mcmc(x))[1,])
+df$lower <- thpd[1,]
+df$higher <- thpd[2,]
+df <- mutate(df, width = higher - lower)
+
+comp_plt <- ggplot(df) + geom_point(aes(x = t, y = tmap), size = 3, shape = 2) +
+  geom_errorbar(aes(ymax = higher, ymin = lower, x = t), width = 0.01, alpha = 0.5, colour = "darkred") +
+  stat_function(fun = function(x) 1 - x ) + ylab("Pseudotime MAP estimate") +
+  xlab("Principal curve value") 
+
+
+# HD noise plot -------
+hnoise <- h5read("../data/embeddings.h5", "monocle/hdnoise")
+to_keep <- as.logical(h5read(h5file, "to_keep"))
+hnoise <- hnoise[to_keep]
+df$hnoise <- hnoise
+
+# plt1 <- ggplot(df) + geom_point(aes(x = t_gt, y = hnoise)) + xlab("princurve fit") + ylab("dist to curve")
+# plt2 <- ggplot(df) + geom_point(aes(x = tmap, y = width)) + xlab("GP MAP estimate") + ylab("95% HPD")
+# plot_grid(plt1, plt2, embedded_plt, ncol = 1)
+
+# HPD boxplot
+hpd_plt <- ggplot(df) + geom_point(aes(x = tmap, y = width), size = 3, alpha = 0.6) + 
+  stat_smooth(aes(x = tmap, y = width), method = "loess", colour = "darkred") + xlab("Pseudotime MAP estimate") +
+  ylab("Width of 95% HPD credible interval")
+
+# Save all plots ----------------------------------------------------------
+
+#ggsave("monocle_embedding.png", embedded_plt, width=3, height = 1.5, scale = 3.5)
+# ggsave("pst_traces.png", pst_trace_plt, width=8, height =5)
+# ggsave("bb.png", bb_plt, width=8, height =5)
+# ggsave("pos_mean.png", comp_plt, width=8, height=5)
+
+grid <- plot_grid(embedded_plt, comp_plt, pst_trace_plt, hpd_plt,
+                  nrow = 2, labels = c("A", "B", "C", "D"))
+
+cowplot::ggsave(filename = "monocle_all.png", plot = grid, width = 3, height = 2, scale = 3.5)
